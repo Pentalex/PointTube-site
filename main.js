@@ -10,6 +10,10 @@ const videoFrame = document.getElementById("video")
 var player;
 var videoQueue = []
 
+videoSocket.onopen = function (event) {
+  videoSocket.send("overlay");
+};
+
 function onYouTubeIframeAPIReady() {
     player = new YT.Player('player', {
     height: '1080',
@@ -30,20 +34,27 @@ function onPlayerReady(event) {
   const iframeElement = document.getElementById('player')
   videoSocket.onmessage = function (event) {
 	  console.log(event.data);
-	  const splitData = event.data.split(' ')
-	  const time = splitData[0]
-	  const id = splitData[1]
-	  if(player.getPlayerState() != 5 && player.getPlayerState() != 0){
-	  	videoQueue.push({'id': id, 'time': time})
-	  	console.log('added video to queue')
-	  } else{
-	  	player.cueVideoById({
-	  		'videoId': id,
-	  		'startSeconds': 0,
-	  		'endSeconds': time
-	  	})
-	  	player.playVideo()
+	  if(event.data === 'skip'){
+	  	player.pauseVideo()
+	  	return
+	  } else {
+	  	const splitData = event.data.split(' ')
+		  const time = splitData[0]
+		  const id = splitData[1]
+		  if(player.getPlayerState() != 5 && player.getPlayerState() != 0 && player.getPlayerState() != 2){
+		  	videoQueue.push({'id': id, 'time': time})
+		  	console.log('added video to queue')
+		  } else{
+		  	player.cueVideoById({
+		  		'videoId': id,
+		  		'startSeconds': 0,
+		  		'endSeconds': time
+		  	})
+		  	console.log('playing video')
+		  	player.playVideo()
+		  }
 	  }
+
 
 
 }
@@ -55,7 +66,6 @@ function onPlayerStateChange(event) {
 	console.log(player.getVideoUrl())
 	console.log('Playerstate: ' + event.data)
 	if (event.data == YT.PlayerState.ENDED) {
-		console.log(videoQueue.length)
 		if(videoQueue.length > 0){
 			player.cueVideoById({
 			  	'videoId': videoQueue[0].id,
@@ -70,6 +80,17 @@ function onPlayerStateChange(event) {
 		iframeElement.style.opacity = 1;
 		if(videoQueue[0] && videoQueue[0].id == youtube_parser(player.getVideoUrl())){
 			videoQueue.shift()
+		}
+	} else if (event.data == YT.PlayerState.PAUSED){
+		if(videoQueue.length > 0){
+			player.cueVideoById({
+			  	'videoId': videoQueue[0].id,
+			  	'startSeconds': 0,
+			  	'endSeconds': videoQueue[0].time
+			 })
+			player.playVideo()
+		} else{
+			iframeElement.style.opacity = 0;
 		}
 	}
 }
