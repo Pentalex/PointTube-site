@@ -14,6 +14,54 @@ videoSocket.onopen = function (event) {
   videoSocket.send("overlay");
 };
 
+
+var reg = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*)(?:(\?t|&start)=(\d+))?.*/gm;
+
+
+function connect(){
+
+	var videoSocket = new WebSocket("ws://localhost:8081")
+	videoSocket.onopen = function (event) {
+	  videoSocket.send("overlay");
+
+	  videoSocket.onmessage = function (event) {
+	  console.log(event.data);
+	  if(event.data === 'skip'){
+	  	player.pauseVideo()
+	  	return
+	  } else {
+	  	const splitData = event.data.split(' ')
+		  const time = splitData[0]
+		  const id = splitData[1]
+		  const startTime = splitData[2]
+		  if(player.getPlayerState() != 5 && player.getPlayerState() != 0 && player.getPlayerState() != 2){
+		  	videoQueue.push({'id': id, 'time': time, 'startTime' : startTime})
+		  	console.log('added video to queue')
+		  } else{
+		  	player.cueVideoById({
+		  		'videoId': id,
+		  		'startSeconds': startTime,
+		  		'endSeconds': parseInt(startTime) + parseInt(time)
+		  	})
+		  	console.log('playing video')
+		  	player.playVideo()
+		  }
+		  }
+		}	
+
+		};
+	videoSocket.onclose = function(e) {
+	  console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
+	  setTimeout(function() {
+	    connect();
+	  }, 1000);
+	};
+	videoSocket.onerror = function(err){
+		console.error(err)
+		videoSocket.close();
+	}
+}
+
 function onYouTubeIframeAPIReady() {
     player = new YT.Player('player', {
     height: '1080',
@@ -31,34 +79,7 @@ function onYouTubeIframeAPIReady() {
 function onPlayerReady(event) {
   console.log('player ready!')
   player.stopVideo()
-  const iframeElement = document.getElementById('player')
-  videoSocket.onmessage = function (event) {
-	  console.log(event.data);
-	  if(event.data === 'skip'){
-	  	player.pauseVideo()
-	  	return
-	  } else {
-	  	const splitData = event.data.split(' ')
-		  const time = splitData[0]
-		  const id = splitData[1]
-		  if(player.getPlayerState() != 5 && player.getPlayerState() != 0 && player.getPlayerState() != 2){
-		  	videoQueue.push({'id': id, 'time': time})
-		  	console.log('added video to queue')
-		  } else{
-		  	player.cueVideoById({
-		  		'videoId': id,
-		  		'startSeconds': 0,
-		  		'endSeconds': time
-		  	})
-		  	console.log('playing video')
-		  	player.playVideo()
-		  }
-	  }
-
-
-
-}
-
+  connect()
 }
 
 function onPlayerStateChange(event) {
@@ -69,8 +90,8 @@ function onPlayerStateChange(event) {
 		if(videoQueue.length > 0){
 			player.cueVideoById({
 			  	'videoId': videoQueue[0].id,
-			  	'startSeconds': 0,
-			  	'endSeconds': videoQueue[0].time
+			  	'startSeconds': videoQueue[0].startTime,
+			  	'endSeconds': parseInt(videoQueue[0].time) + parseInt(videoQueue[0].startTime)
 			 })
 			player.playVideo()
 		} else{
@@ -78,15 +99,15 @@ function onPlayerStateChange(event) {
 		}
 	} else if (event.data == YT.PlayerState.PLAYING){
 		iframeElement.style.opacity = 1;
-		if(videoQueue[0] && videoQueue[0].id == youtube_parser(player.getVideoUrl())){
+		if(videoQueue[0] && videoQueue[0].id == player.getVideoUrl().split(reg)[2]){
 			videoQueue.shift()
 		}
 	} else if (event.data == YT.PlayerState.PAUSED){
 		if(videoQueue.length > 0){
 			player.cueVideoById({
 			  	'videoId': videoQueue[0].id,
-			  	'startSeconds': 0,
-			  	'endSeconds': videoQueue[0].time
+			  	'startSeconds': videoQueue[0].startTime,
+			  	'endSeconds': parseInt(videoQueue[0].time) + parseInt(videoQueue[0].startTime)
 			 })
 			player.playVideo()
 		} else{
@@ -95,10 +116,4 @@ function onPlayerStateChange(event) {
 	}
 }
 
-
-function youtube_parser(url){
-    var regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
-    var match = url.match(regExp);
-    return (match&&match[7].length==11)? match[7] : false;
-}
 
